@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
 import numpy as np
+import pandas as pd
 
 from preprocessing import load_subjects
 from pathlib import Path
@@ -20,49 +21,59 @@ class FreeSurferLUT:
 
     def __init__(self, path: Path):
         self.path = LUT_PATH if path is None else path
-
-        self._color_array: np.ndarray = None
-        self._labels: list            = None
+        self._lookup_df: pd.DataFrame = None
 
         self._load_lut()
 
     
     def label_index(self, label: str) -> int:
-        return self._labels.index(label)
+        byte_str = bytes(label, encoding='utf-8')
+        index = self._lookup_df.index[self._lookup_df['Label'] == byte_str]
+
+        return index.to_numpy()[0]
 
 
-    def get_colormap(self, areas: list = None) -> ListedColormap:
+    def apply(self, image: np.ndarray, areas: list = None) -> np.ndarray:
         """
-        Gets the `ListedColormap` from FreeSurfer's lookup table.
+        Applies the colormap to a image.
 
-        The `areas` optional argument should contain label names (`StructName`) to be filtered in.
-        This is specially useful when visualizing a few key areas in the brain.
+        `areas` should be a list of label names (`StructName`) to be filtered in.
         """
 
-        if areas is None:
-            return ListedColormap(self._color_array, name='FreeSurferColorLUT')
+        if areas != None:
+            areas = [self.label_index(label) for label in areas]
 
-        areas = [self.label_index(label) for label in areas]
+        shape = (image.shape[0], image.shape[1], 3)
+        output = np.empty(shape)
 
-        BLACK = (0., 0., 0.)
-        color_filter = lambda x: x[1] if x[0] in areas else BLACK
+        for x in range(0, output.shape[0]):
+            for y in range(0, output.shape[1]):
+                pixel = image[x, y]
 
-        filtered_colors = [color_filter(item) for item in enumerate(self._color_array)]
+                series = self._lookup_df.loc[pixel]
 
-        return ListedColormap(filtered_colors, name='FilteredFreeSurferColorLUT')
+                if areas == None:
+                    pixel = (series[1] / 255, series[2] / 255, series[3] / 255)
+                else:
+                    if pixel in areas:
+                        pixel = (series[1] / 255, series[2] / 255, series[3] / 255)
+                    else:
+                        pixel = (0., 0., 0.)
+
+                output[x, y] = pixel
+
+        return output
+
 
 
     def _load_lut(self) -> np.ndarray:
-        _, labels, r, g, b, _ = np.loadtxt(self.path, dtype="i4,S32,i2,i2,i2,i2", unpack=True)
-        assert(r.shape == g.shape == b.shape)
+        packed_lut            = np.loadtxt(self.path, dtype="i4,S32,i2,i2,i2,i2", unpack=False)
+        column_names = ['No', 'Label', 'R', 'G', 'B', 'A']
 
-        lut = []
-        for i in range(0, len(r)):
-            color = (r[i] / 255, g[i] / 255, b[i] / 255)
-            lut.append(color)
+        self._lookup_df = pd.DataFrame(packed_lut)
+        self._lookup_df.columns = column_names
 
-        self._color_array = np.asarray(lut)
-        self._labels      = [label.decode('utf-8') for label in labels]
+        self._lookup_df.set_index(keys=['No'], drop=True, inplace=True)
 
 
 subjs = load_subjects()
@@ -72,18 +83,13 @@ aseg  = subjs[0].load_mri('aseg')
 aparc = subjs[0].load_mri('aparc.DKTatlas+aseg')
 
 thalamus_areas = ['Left-Thalamus-Proper', 'Right-Thalamus-Proper']
-
 lut = FreeSurferLUT('/usr/local/freesurfer/FreeSurferColorLUT.txt')
-
-normal_map = lut.get_colormap()
-thalamus_map = lut.get_colormap(areas=thalamus_areas)
 
 data = aparc.get_data()
 slice = data[:, 128, :]
 
-imshow(slice, cmap=normal_map)
-plt.show()
 
-imshow(slice, cmap=thalamus_map)
+mapped_image = lut.apply(slice, areas=['Left-Thalamus-Proper', 'Right-Thalamus-Proper'])
 
+imshow(mapped_image)
 plt.show()
