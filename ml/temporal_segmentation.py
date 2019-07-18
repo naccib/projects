@@ -53,10 +53,10 @@ class FreeSurferLUT:
                 series = self._lookup_df.loc[pixel]
 
                 if areas == None:
-                    pixel = (series[1] / 255, series[2] / 255, series[3] / 255)
+                    pixel = (series[1] / 255.0, series[2] / 255.0, series[3] / 255.0)
                 else:
                     if pixel in areas:
-                        pixel = (series[1] / 255, series[2] / 255, series[3] / 255)
+                        pixel = (series[1] / 255.0, series[2] / 255.0, series[3] / 255.0)
                     else:
                         pixel = (0., 0., 0.)
 
@@ -64,6 +64,21 @@ class FreeSurferLUT:
 
         return output
 
+
+    def mask(self, image: np.ndarray, segmented: np.ndarray, areas: list) -> np.ndarray:
+        output = np.empty(image.shape)
+        areas = [self.label_index(label) for label in areas]
+
+        for x in range(0, output.shape[0]):
+            for y in range(0, output.shape[1]):
+                map_pixel = segmented[x, y]
+
+                if map_pixel in areas:
+                    output[x, y] = image[x, y] / 255.0
+                else:
+                    output[x, y] = 0
+
+        return output
 
 
     def _load_lut(self) -> np.ndarray:
@@ -82,14 +97,18 @@ brain = subjs[0].load_mri('brain')
 aseg  = subjs[0].load_mri('aseg')
 aparc = subjs[0].load_mri('aparc.DKTatlas+aseg')
 
-thalamus_areas = ['Left-Thalamus-Proper', 'Right-Thalamus-Proper']
 lut = FreeSurferLUT('/usr/local/freesurfer/FreeSurferColorLUT.txt')
 
-data = aparc.get_data()
-slice = data[:, 128, :]
+aparc = aparc.get_data()[:, 128, :]
+brain = brain.get_data()[:, 128, :]
 
+thalamus_areas = ['Left-Thalamus-Proper', 'Right-Thalamus-Proper']
 
-mapped_image = lut.apply(slice, areas=['Left-Thalamus-Proper', 'Right-Thalamus-Proper'])
+mapped_image = lut.apply(aparc, areas=thalamus_areas)
+masked_image = lut.mask(brain, aparc, thalamus_areas)
 
 imshow(mapped_image)
+plt.show()
+
+imshow(masked_image, cmap='gray')
 plt.show()
