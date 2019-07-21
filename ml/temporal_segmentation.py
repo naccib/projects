@@ -20,6 +20,11 @@ class FreeSurferLUT:
     """
 
     def __init__(self, path: Path):
+        """
+        Creates a `FreeSurferLUT` instance.
+        The source for the lookup table is `path`.
+        """
+
         self.path = LUT_PATH if path is None else path
         self._lookup_df: pd.DataFrame = None
 
@@ -27,12 +32,15 @@ class FreeSurferLUT:
 
     
     def label_index(self, label: str) -> int:
+        """
+        Returns the index of a anatomical area named `label`.
+        """
         byte_str = bytes(label, encoding='utf-8')
         index = self._lookup_df.index[self._lookup_df['Label'] == byte_str]
 
         return index.to_numpy()[0]
 
-
+ 
     def apply(self, image: np.ndarray, areas: list = None) -> np.ndarray:
         """
         Applies the colormap to a image.
@@ -66,6 +74,11 @@ class FreeSurferLUT:
 
 
     def mask(self, image: np.ndarray, segmented: np.ndarray, areas: list) -> np.ndarray:
+        """
+        Masks a number of anatomical areas (`areas`) on a MRI image (`image`) and returns it.
+        The source used for masking is a segmented version of the same image (`segmented`).
+        """
+
         output = np.empty(image.shape)
         areas = [self.label_index(label) for label in areas]
 
