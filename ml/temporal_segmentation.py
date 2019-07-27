@@ -1,4 +1,9 @@
+from skimage import img_as_float, img_as_bool
+from skimage.draw import rectangle_perimeter
 from skimage.io import imshow, imshow_collection
+from skimage.filters import threshold_otsu
+from skimage.util import invert
+from skimage.morphology import convex_hull_image
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
@@ -41,9 +46,9 @@ class FreeSurferLUT:
         return index.to_numpy()[0]
 
  
-    def apply(self, image: np.ndarray, areas: list = None) -> np.ndarray:
+    def apply_to_slice(self, image: np.ndarray, areas: list = None) -> np.ndarray:
         """
-        Applies the colormap to a image.
+        Applies this colormap colormap to a MRI image's slice.
 
         `areas` should be a list of label names (`StructName`) to be filtered in.
         """
@@ -73,9 +78,9 @@ class FreeSurferLUT:
         return output
 
 
-    def mask(self, image: np.ndarray, segmented: np.ndarray, areas: list) -> np.ndarray:
+    def mask_slice(self, image: np.ndarray, segmented: np.ndarray, areas: list) -> np.ndarray:
         """
-        Masks a number of anatomical areas (`areas`) on a MRI image (`image`) and returns it.
+        Masks a number of anatomical areas (`areas`) on a MRI image slice (`image`) and returns it.
         The source used for masking is a segmented version of the same image (`segmented`).
         """
 
@@ -95,7 +100,7 @@ class FreeSurferLUT:
 
 
     def _load_lut(self) -> np.ndarray:
-        packed_lut            = np.loadtxt(self.path, dtype="i4,S32,i2,i2,i2,i2", unpack=False)
+        packed_lut = np.loadtxt(self.path, dtype="i4,S32,i2,i2,i2,i2", unpack=False)
         column_names = ['No', 'Label', 'R', 'G', 'B', 'A']
 
         self._lookup_df = pd.DataFrame(packed_lut)
@@ -104,24 +109,58 @@ class FreeSurferLUT:
         self._lookup_df.set_index(keys=['No'], drop=True, inplace=True)
 
 
-subjs = load_subjects()
+    def bounding_box(self, segmentation: np.ndarray, struct_name: str) -> ((float, float), (float, float)):
+        """
+        Given the `segmentation` map and the structure label (`struct_name`),
+        this function returns the bounding box of said struct in the image.
 
-brain = subjs[0].load_mri('brain')
-aseg  = subjs[0].load_mri('aseg')
-aparc = subjs[0].load_mri('aparc.DKTatlas+aseg')
+        The bouding box will be returned in this format:
+        (x_min, y_min), (x_max, y_max)
+        """
+
+        struct_color = self.label_index(struct_name)
+
+        x_min = segmentation.shape[0]
+        x_max = 0.0
+
+        y_min = segmentation.shape[1]
+        y_max = 0.0
+
+        for x in range(0, segmentation.shape[0]):
+            for y in range(0, segmentation.shape[1]):
+                if segmentation[x, y] == struct_color:
+                    if y > y_max:
+                        y_max = y
+                    elif y < y_min:
+                        y_min = y
+
+                    if x > x_max:
+                        x_max = x
+                    elif x < x_min:
+                        x_min = x
+
+        return ((x_min, y_min), (x_max, y_max))
+
+
+
+subjs = load_subjects()
 
 lut = FreeSurferLUT('/usr/local/freesurfer/FreeSurferColorLUT.txt')
 
-aparc = aparc.get_data()[:, 128, :]
-brain = brain.get_data()[:, 128, :]
+brain_one = subjs[0].load_mri('brain').get_data()[:, 128, :]
+aparc_one = subjs[0].load_mri('aparc.DKTatlas+aseg').get_data()[:, 128, :]
 
 thalamus_areas = ['Left-Thalamus-Proper', 'Right-Thalamus-Proper']
 
-mapped_image = lut.apply(aparc, areas=thalamus_areas)
-masked_image = lut.mask(brain, aparc, thalamus_areas)
+mapped_image = lut.apply_to_slice(aparc_one, areas=thalamus_areas)
+start, end = lut.bounding_box(aparc_one, thalamus_areas[0])
 
-imshow(mapped_image)
-plt.show()
+rr, cc = rectangle_perimeter(start, end=end, shape=brain_one.shape)
+brain_one[rr, cc] = 1
 
-imshow(masked_image, cmap='gray')
+fig, (ax1, ax2) = plt.subplots(ncols=2, nrows=1, figsize=(10, 6))
+
+ax1.imshow(brain_one, cmap='gray')
+ax2.imshow(mapped_image)
+
 plt.show()
