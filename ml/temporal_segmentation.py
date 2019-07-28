@@ -5,6 +5,8 @@ from skimage.filters import threshold_otsu
 from skimage.util import invert
 from skimage.morphology import convex_hull_image
 
+from nilearn.plotting import plot_anat
+
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 
@@ -12,11 +14,17 @@ import numpy as np
 import pandas as pd
 
 from preprocessing import load_subjects
+from mri_viewer import MRIViewer
+
 from pathlib import Path
+from typing import NewType
 
 
 ROOT_DIR = Path(f"{Path.home()}/data/ds000030_R1.0.5/derivatives/freesurfer/")
 LUT_PATH = ROOT_DIR.joinpath('FreeSurferColorLUT.txt')
+
+BoudingBox2D = NewType('BoundingBox2D', ((float, float), (float, float)))
+BoudingBox3D = NewType('BoundingBox3D', ((float, float, float), (float, float, float)))
 
 
 class FreeSurferLUT:
@@ -109,7 +117,41 @@ class FreeSurferLUT:
         self._lookup_df.set_index(keys=['No'], drop=True, inplace=True)
 
 
-    def bounding_box(self, segmentation: np.ndarray, struct_name: str) -> ((float, float), (float, float)):
+    def bounding_box(self, segmentation: np.ndarray, struct_name: str) -> BoudingBox3D:
+        struct_color = self.label_index(struct_name)
+
+        x_min = segmentation.shape[0]
+        x_max = 0.0
+
+        y_min = segmentation.shape[1]
+        y_max = 0.0
+
+        z_min = segmentation.shape[2]
+        z_max = 0.0
+
+        for x in range(0, segmentation.shape[0]):
+            for y in range(0, segmentation.shape[1]):
+                for z in range(0, segmentation.shape[2]):
+                    if segmentation[x, y, z] == struct_color:
+                        if y > y_max:
+                            y_max = y
+                        elif y < y_min:
+                            y_min = y
+
+                        if x > x_max:
+                            x_max = x
+                        elif x < x_min:
+                            x_min = x
+
+                        if z > z_max:
+                            z_max = z
+                        elif x < x_min:
+                            z_min = z
+
+        return ((x_min, y_min, z_min), (x_max, y_max, z_max))
+
+
+    def slice_bounding_box(self, segmentation: np.ndarray, struct_name: str) -> BoudingBox2D:
         """
         Given the `segmentation` map and the structure label (`struct_name`),
         this function returns the bounding box of said struct in the image.
@@ -147,20 +189,13 @@ subjs = load_subjects()
 
 lut = FreeSurferLUT('/usr/local/freesurfer/FreeSurferColorLUT.txt')
 
-brain_one = subjs[0].load_mri('brain').get_data()[:, 128, :]
-aparc_one = subjs[0].load_mri('aparc.DKTatlas+aseg').get_data()[:, 128, :]
+brain = subjs[0].load_mri('brain').get_data()
+aparc = subjs[0].load_mri('aparc.DKTatlas+aseg').get_data()
 
 thalamus_areas = ['Left-Thalamus-Proper', 'Right-Thalamus-Proper']
+minima, maxima = lut.bounding_box(aparc, thalamus_areas[0])
 
-mapped_image = lut.apply_to_slice(aparc_one, areas=thalamus_areas)
-start, end = lut.bounding_box(aparc_one, thalamus_areas[0])
+#rr, cc = rectangle_perimeter(start, end=end, shape=brain.shape)
+#brain_one[rr, cc] = 1
 
-rr, cc = rectangle_perimeter(start, end=end, shape=brain_one.shape)
-brain_one[rr, cc] = 1
-
-fig, (ax1, ax2) = plt.subplots(ncols=2, nrows=1, figsize=(10, 6))
-
-ax1.imshow(brain_one, cmap='gray')
-ax2.imshow(mapped_image)
-
-plt.show()
+viewer = MRIViewer(brain)
