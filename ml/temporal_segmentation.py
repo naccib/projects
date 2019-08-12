@@ -117,13 +117,13 @@ class FreeSurferLUT:
         Applies a red bounding box containing the given `struct_name` on the original MRI image.
         """
 
-        assert(brain.shape == segmentation.shape)
+        assert(original.shape == segmentation.shape)
 
         # simple function to check if `x` is in a range (without creating a `Range` object)
         is_in = lambda x, a, b: a <= x <= b
         
         # Make output colored
-        new_shape = (brain.shape[0], brain.shape[1], brain.shape[2], 3)
+        new_shape = (original.shape[0], original.shape[1], original.shape[2], 3)
         new_image = np.empty(new_shape, dtype=float)
 
         (x_min, y_min, z_min), (x_max, y_max, z_max) = self.find_bounding_box(segmentation, struct_name)
@@ -147,7 +147,7 @@ class FreeSurferLUT:
 
 
     def crop_bounding_box(self, original: np.ndarray, segmentation: np.ndarray, struct_name: str) -> np.ndarray:
-        assert(brain.shape == segmentation.shape)
+        assert(original.shape == segmentation.shape)
 
         (x_min, y_min, z_min), (x_max, y_max, z_max) = self.find_bounding_box(segmentation, struct_name)
         new_image = original[x_min : x_max, y_min : y_max, z_min : z_max]
