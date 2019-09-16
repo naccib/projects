@@ -203,7 +203,7 @@ def load_all_stats(fsf_root: Path, participants: pd.DataFrame) -> ndarray:
     return np.asarray(stats)
     
 def get_participants_data(data_fields=['Volume_mm3', 'normStdDev'], verbose=False) -> (pd.DataFrame, ndarray):
-    log = lambda text: print(text if verbose else '')
+    log = lambda s: print(s) if verbose else None
 
     log("Reading participants.csv...")
 

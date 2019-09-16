@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 from matplotlib.backend_bases import MouseEvent
 
-from preprocessing import load_subjects
+from subject import load_subjects
 from scipy.ndimage import rotate
 
 

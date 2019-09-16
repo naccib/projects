@@ -30,12 +30,14 @@ parser = ArgumentParser(description='Download preprocessed data from the UCLA LA
 parser.add_argument('url', metavar='U', type=str, help='URL to be scraped for links')
 parser.add_argument('out', metavar='O', type=str, help='Output folder')
 parser.add_argument('--dump', metavar='D', type=bool, help='If true, dumps the URLs to url_list.txt')
+parser.add_argument('--pipeline', metavar='P', type=str, help='The pipeline to be downloaded. Defaults to "freesufer"')
 
 args = parser.parse_args()
 
 URL: str = args.url
 OUT: str = args.out
 DUMP: bool = args.dump
+PIPE: str = args.pipeline
 
 if URL is None:
     print("A URL must be defined as the first parameter")
@@ -44,6 +46,10 @@ if URL is None:
 if OUT is None:
     OUT = '.'
     print('Output was no explictly defined. Using current directory.')
+
+if PIPE is None:
+    PIPE = 'freesurfer'
+
 
 print(f"Sending GET request to {URL}...")
 
@@ -63,7 +69,7 @@ link_block = blocks[3]
 # then map the node to the attribute "href"
 possible_links = [node.attrs['href'] for node in link_block.find_all('a') if 'href' in node.attrs]
 
-freesurfer_links = [link for link in possible_links if 'freesurfer' in link]
+freesurfer_links = [link for link in possible_links if PIPE in link]
 
 if DUMP:
     file = open('url_list.txt', 'w+')
