@@ -10,8 +10,8 @@ import numpy as np
 from pathlib import Path
 from typing import List
 
-TEST_FOLDER = Path(f"{Path.home()}/data/ds000030_R1.0.5/derivatives/fmriprep/")
-TEST_METADATA = PARTICIPANTS_INFO = Path(f"{Path.home()}/data/ds000030_R1.0.5/participants.tsv")
+TEST_FOLDER = Path(f"{Path.home()}/data/data/ds000030_R1.0.5/derivatives/fmriprep/")
+TEST_METADATA = PARTICIPANTS_INFO = Path(f"{Path.home()}/data/data/ds000030_R1.0.5/participants.tsv")
 
 class Subject:
     """
@@ -52,6 +52,20 @@ class Subject:
         """
 
         return self.load_anat(image).get_data()
+
+
+    def load_map(self, image: str) -> np.ndarray:
+        """
+        Loads the `np.ndarray` from the `image` specified.
+        `image` represents the type of map, such as `aparc`, `aparc+aseg`, `brain`...
+        """
+
+        image_path = self.path.joinpath('map/{image}.mgz')
+
+        if not image_path.exists():
+            raise ValueError(f'Image {image} does not exist in {str(self.path)}/anat/')
+
+        return nibabel.load(str(image_path)).get_data()
 
 
 class SubjectCollection:

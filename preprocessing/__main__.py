@@ -8,14 +8,19 @@ Preprocessing for the T1-MRI images consists of 4 steps:
  * = Exports NumPy compressed (`.npz`) files.
 """
 
-import SimpleITK as sitk
-
 from subject import LA5C_SUBJECTS
+from normalization import whiten, normalize
+
+from matplotlib import pyplot as plt
+from skimage.io import imshow, imshow_collection
 
 subjs = LA5C_SUBJECTS.select(lambda s: s['diagnosis'] in ['CONTROL', 'SCHZ'])
 
 print(f"Found {len(subjs)} subjects.")
 
-brain = subjs[0].load_babel('brain')
+# select a small sample
+subjs = subjs[0:20]
+subjs = [subj.load_anat('space-MNI152NLin2009cAsym_preproc').get_data() for subj in subjs]
 
-image = sitk.Image([256, 256, 256], sitk.sitkFloat32, 1)
+for subj in whiten(subjs):
+    print(f"{subj.mean()}, {subj.std()}")
