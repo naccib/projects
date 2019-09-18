@@ -24,11 +24,15 @@ class Subject:
         `path` is the `Path` of the given subject.
         """
 
+        if path is None:
+            return
+
         if not path.exists():
             raise ValueError(f'Path {str(path)} doesn\'t exist')
 
         self.path: Path = path
         self.id: str = path.name
+        self.diagnosis: str = None
 
     
     def load_anat(self, image: str) -> nibabel.Nifti2Image:
@@ -74,9 +78,18 @@ class SubjectCollection:
     This class is able to filter them.
     """
 
-    def __init__(self, folder: Path, metadata_file: Path):
+    def __init__(self, folder: Path, metadata_file: Path, subjects: List[Subject] = None, metadata: pd.DataFrame = None):
+        if subjects is not None and metadata is not None:
+            self.subjects = subjects
+            self.metada = metadata
+
+            return
+
         self.subjects: List[Subject] = self._load_folder(folder)
         self.metadata: pd.DataFrame  = self._load_metadata(metadata_file)
+
+        for i in range(0, len(self.subjects)):
+            self.subjects[i].diagnosis = self.subject_metadata(self.subjects[i].id)['diagnosis']
 
         
     def subject_metadata(self, id: str) -> pd.Series:
@@ -93,7 +106,8 @@ class SubjectCollection:
         `f` takes the `pd.Series` containing the `Subject`'s metadata.
         """ 
 
-        return [subj for subj in self.subjects if f(self.subject_metadata(subj.id))]
+        subjs = [subj for subj in self.subjects if f(self.subject_metadata(subj.id))]
+        return SubjectCollection(None, None, subjects=subjs, metadata=self.metadata)
 
 
     def _load_folder(self, folder: Path) -> List[Subject]:
