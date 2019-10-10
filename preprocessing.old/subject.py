@@ -1,0 +1,220 @@
+"""
+Defines the `Subject` class.
+"""
+
+import nibabel
+
+import pandas as pd
+import numpy as np
+
+from pathlib import Path
+from typing import List
+
+TEST_FOLDER = Path(f"{Path.home()}/data/data/ds000030_R1.0.5/derivatives/fmriprep/")
+TEST_METADATA = PARTICIPANTS_INFO = Path(f"{Path.home()}/data/data/ds000030_R1.0.5/participants.tsv")
+
+
+class Subject:
+    """
+    Represents a single subject in a LA5c study.
+    """
+
+    def __init__(self, path: Path):
+        """
+        Creates a new `Subject` object.
+        `path` is the `Path` of the given subject.
+        """
+
+        if path is None:
+            return
+
+        if not path.exists():
+            raise ValueError(f'Path {str(path)} doesn\'t exist')
+
+        self.path: Path = path
+        self.id: str = path.name
+        self.diagnosis: str = None
+
+    
+    def load_anat(self, image: str) -> nibabel.Nifti2Image:
+        """
+        Loads the `nibabel.Nifti2Image` corresponding the `image` string.
+        `image` represents the type of image, such as: `aparc`, `aparc+aseg`, `brain`...
+        """
+
+        image_path = self.path.joinpath(f'anat/{self.id}_T1w_{image}.nii.gz')
+
+        if not image_path.exists():
+            raise ValueError(f'Image {image} does not exist in {str(self.path)}/anat/')
+
+        return nibabel.load(str(image_path))
+
+
+    def load_mri(self, image: str) -> np.ndarray:
+        """
+        Loads the `np.ndarray` from the `image` specified.
+        `image` represents the type of image, such as: `aparc`, `aparc+aseg`, `brain`...
+        """
+
+        return self.load_anat(image).get_data()
+
+
+    def load_map(self, image: str) -> np.ndarray:
+        """
+        Loads the `np.ndarray` from the `image` specified.
+        `image` represents the type of map, such as `aparc`, `aparc+aseg`, `brain`...
+        """
+
+        image_path = self.path.joinpath('map/{image}.mgz')
+
+        if not image_path.exists():
+            raise ValueError(f'Image {image} does not exist in {str(self.path)}/anat/')
+
+        return nibabel.load(str(image_path)).get_data()
+
+
+class SubjectCollection:
+    """
+    Represents a collection of `Subject`s.
+    This class is able to filter them.
+    """
+
+    def __init__(self, folder: Path, metadata_file: Path, subjects: List[Subject] = None, metadata: pd.DataFrame = None):
+        if subjects is not None and metadata is not None:
+            self.subjects = subjects
+            self.metada = metadata
+
+            return
+
+        self.subjects: List[Subject] = self._load_folder(folder)
+        self.metadata: pd.DataFrame  = self._load_metadata(metadata_file)
+
+        for i in range(0, len(self.subjects)):
+            self.subjects[i].diagnosis = self.subject_metadata(self.subjects[i].id)['diagnosis']
+
+        
+    def subject_metadata(self, id: str) -> pd.Series:
+        """
+        Returns the metadata of the `Subject` with ID `id`.
+        """
+
+        return self.metadata.loc[id]
+
+    
+    def select(self, f) -> List[Subject]:
+        """
+        Filters all subjects with `f(subject) == True`.
+        `f` takes the `pd.Series` containing the `Subject`'s metadata.
+        """ 
+
+        subjs = [subj for subj in self.subjects if f(self.subject_metadata(subj.id))]
+        return SubjectCollection(None, None, subjects=subjs, metadata=self.metadata)
+
+
+    def to_npz_dir(self, dir: Path):
+        """
+        Saves the current raw data to various `.npz` files
+        containing the Subject MRI data and diagnosis.
+        """
+
+        diagnosis_table = {
+            'CONTROL': 0,
+            'SCHZ': 1
+        }
+
+        diagnosis_list = []
+
+        for subj in self.subjects:
+            diagnosis = diagnosis_table[subj.diagnosis]
+            mri = subj.load_anat('space-MNI152NLin2009cAsym_preproc').get_data()
+
+            diagnosis_list.append(diagnosis)
+            out_file = dir.joinpath(subj.id)
+
+            np.savez(out_file, {
+                'mri': mri,
+                'diagnosis': diagnosis
+            })
+            
+        np.savetxt(dir.joinpath('diagnosis.txt'), np.asarray(diagnosis_list), delimiter=',')
+
+
+
+    def _load_folder(self, folder: Path) -> List[Subject]:
+        """
+        Returns a `list` of all `Subject`s within a `folder`.
+        """
+
+        return [Subject(item) for item in folder.glob('*') if item.is_dir() and item.name.startswith('sub')]
+
+    
+    def _load_metadata(self, metadata_file: Path) -> pd.DataFrame:
+        """
+        Returns a `pd.DataFrame` containing subject info.
+        """
+
+        metadata  = pd.read_csv(str(metadata_file), sep='\t')
+        metadata = metadata.dropna(subset=['T1w']) # drop all patients that do not have T1w images
+        metadata.index = metadata['participant_id']
+
+        return metadata
+
+    def __len__(self):
+        return self.subjects.__len__()
+
+
+class LazySubject:
+    """
+    Represents a single subject in a MRI study.
+
+    Each subject carries the path to a MRI file and a diagnosis.
+    The MRI data itself can be lazily loaded and saved to disk.
+    """
+
+    path: Path = None
+    id: str = None
+    mri: np.ndarray = None
+    diagnosis: float = None
+
+    def __init__(self, id: str = None, mri: np.ndarray = None, diagnosis: float = None, path: Path = None):
+        """
+        Creates a new LazySubject instance.
+        """
+        
+        self.mri = mri
+        self.diagnosis = diagnosis
+        
+        self.id = id
+        self.path = path
+
+    
+    @property
+    def on_disk(self) -> bool:
+        return self.path is not None and self.path.exists()
+
+    
+    @property
+    def on_memory(self) -> bool:
+        return self.mri is not None and self.diagnosis is not None
+
+
+    @staticmethod
+    def from_disk(path: Path) -> LazySubject:
+        """
+        Loads a subject from file path `path` and
+        returns it.
+        """
+
+        data = np.load
+        
+
+    
+
+
+LA5C_SUBJECTS = SubjectCollection(TEST_FOLDER, TEST_METADATA)
+
+if __name__ == '__main__':
+    pass
+        
+
+    
